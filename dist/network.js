@@ -603,8 +603,10 @@ var BandwidthModule = (function (_HttpModule) {
                     this.settings({ data: { size: size } });
                     this.trigger('restart', size);
 
-                    this._isRestarting = true;
-                    this.start();
+                    if (!this._intendedEnd) {
+                        this._isRestarting = true;
+                        this.start();
+                    }
                 }
 
             return this;
