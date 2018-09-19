@@ -603,6 +603,7 @@ var BandwidthModule = (function (_HttpModule) {
                     this.settings({ data: { size: size } });
                     this.trigger('restart', size);
 
+                    // If we don't check this, abort call inside restart handler will have no effect, because this will revive it
                     if (!this._intendedEnd) {
                         this._isRestarting = true;
                         this.start();
@@ -764,25 +765,6 @@ var HttpModule = (function (_EventDispatcher) {
         initializer: function initializer() {
             return false;
         },
-
-        /**
-         * We're experiencing problems in OSX Safari, iOS Safari and iOS app
-         * WebView, where the `XMLHttpRequest.upload` listeners for 'load' and
-         * 'loadend' never get called. We can workaround this by using the events
-         * listeners from the more general `XMLHttpRequest`.
-         *
-         * This variable will be set to true only if these callbacks work as
-         * expected, in which case no workaround is necessary.
-         * @private
-         * @member {boolean} HttpModule#_xhrUploadLoadListenerCalled
-         */
-        enumerable: true
-    }, {
-        key: '_xhrUploadLoadListenerCalled',
-        decorators: [(0, _utilsDecorators.enumerable)(false)],
-        initializer: function initializer() {
-            return false;
-        },
         enumerable: true
     }], null, _instanceInitializers);
 
@@ -808,8 +790,6 @@ var HttpModule = (function (_EventDispatcher) {
         _defineDecoratedPropertyDescriptor(this, '_requesting', _instanceInitializers);
 
         _defineDecoratedPropertyDescriptor(this, '_requestingOverridden', _instanceInitializers);
-
-        _defineDecoratedPropertyDescriptor(this, '_xhrUploadLoadListenerCalled', _instanceInitializers);
 
         this._extendDefaultSettings({
             endpoint: './network.php',
@@ -951,6 +931,11 @@ var HttpModule = (function (_EventDispatcher) {
             // Bind all the XHR events
             var events = ['loadstart', 'progress', 'abort', 'error', 'load', 'timeout', 'loadend', 'readystatechange'];
 
+            var isIOS = function isIOS() {
+                return (/(iPhone|iPod|iPad).*AppleWebKit(?!.*Version)/i.test(navigator.userAgent)
+                );
+            };
+
             var _this = this;
             events.forEach(function (eventType) {
                 xhr.addEventListener(eventType, function () {
@@ -961,7 +946,23 @@ var HttpModule = (function (_EventDispatcher) {
                     // A last progress event can be triggered once a request has timed out, ignore it.
                     if (eventType == 'progress' && !_this3._requesting) return;
 
-                    if (!_this.xhrUploadLoadCalled && (eventType == 'load' || eventType == 'loadend')) {
+                    /**
+                    * We're experiencing problems in OSX Safari, iOS Safari and iOS app
+                    * WebView, where the `XMLHttpRequest.upload` listeners for 'load' and
+                    * 'loadend' never get called. We can workaround this by using the events
+                    * listeners from the more general `XMLHttpRequest`.
+                    *
+                    * This variable will be set to true only if these callbacks work as
+                    * expected, in which case no workaround is necessary.
+                    *
+                    * updated: 19/09/2018 - The 'load' and 'loadend' now freaking sometimes
+                    *                       fire, which broke this work-around (thanks Apple,
+                    *                       you da bes), because when they did fire,
+                    *                       the work-around was getting switched off.
+                    *
+                    *                       Fixed by always performing work-around on iOS.
+                    */
+                    if (isIOS() && (eventType == 'load' || eventType == 'loadend')) {
                         _this3.trigger.apply(_this3, ['xhr-upload-' + eventType, xhr].concat(args));
                     }
 
@@ -973,10 +974,6 @@ var HttpModule = (function (_EventDispatcher) {
                     xhr.upload.addEventListener(eventType, function () {
                         for (var _len2 = arguments.length, args = Array(_len2), _key3 = 0; _key3 < _len2; _key3++) {
                             args[_key3] = arguments[_key3];
-                        }
-
-                        if (eventType == 'load' || eventType == 'loadend') {
-                            _this.xhrUploadLoadCalled = true;
                         }
 
                         _this3.trigger.apply(_this3, ['xhr-upload-' + eventType, xhr].concat(args));
